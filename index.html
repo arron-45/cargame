@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Car Racer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Tone.js for sound effects -->
+    <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+    <style>
+        /* Custom Styles for Game Canvas and Aesthetics */
+        :root {
+            --car-color: #ef4444; /* red-500 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1f2937; /* Dark background */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .game-container {
+            width: 100%;
+            max-width: 600px;
+            margin-top: 2rem;
+        }
+        canvas {
+            background-color: #10b981; /* Green grass */
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 0.75rem; /* rounded-xl */
+            /* Enhanced styling to look like a retro video screen */
+            position: relative;
+            overflow: hidden;
+            border: 8px solid #374151; /* Dark border to resemble a casing */
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.4), /* Orange glow */
+                        0 10px 15px -3px rgba(0, 0, 0, 0.5), 
+                        0 4px 6px -2px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Scanline overlay effect to simulate a CRT screen */
+        canvas::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allows clicks/touch to pass through */
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%,
+                rgba(0, 0, 0, 0.3) 50% /* Darker lines */
+            );
+            background-size: 100% 4px; /* Thin horizontal lines */
+            opacity: 0.7;
+            border-radius: 0.75rem; 
+        }
+
+        .styled-button {
+            transition: all 0.2s;
+            box-shadow: 0 4px #b91c1c;
+        }
+        /* Style for the blue control buttons */
+        #control-left, #control-right {
+             box-shadow: 0 4px #1e40af; /* Blue shadow */
+        }
+        #control-left:hover, #control-right:hover {
+            box-shadow: 0 2px #1e40af;
+            transform: translateY(2px);
+        }
+        #control-left:active, #control-right:active {
+            box-shadow: 0 0 #1e40af;
+            transform: translateY(4px);
+        }
+        
+        /* NEW: Game Over Pulsing Glow */
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 10px #f87171, 0 0 20px #dc2626; }
+            50% { box-shadow: 0 0 5px #f87171, 0 0 35px #dc2626; }
+        }
+        
+        #game-over-modal {
+            background-color: #1f2937; /* Dark background */
+            color: #f87171; /* Light red text */
+            animation: pulse-red 1s infinite alternate; /* Pulsing effect */
+            border: 3px solid #dc2626; /* Deep red border */
+            max-width: 90%;
+            width: 400px;
+        }
+        #game-over-modal h3 {
+            color: #dc2626; /* Deep red title */
+            text-shadow: 0 0 5px #f87171;
+        }
+        #game-over-modal p {
+             color: #f87171;
+        }
+        
+        /* Ensure the modal overlay itself is dark */
+        #custom-modal {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container p-4">
+    <header class="text-center mb-6">
+        <h1 class="text-4xl font-extrabold text-white mb-2">Highway Dash</h1>
+        <p class="text-sm text-gray-400">Use $\leftarrow$ and $\rightarrow$ keys or the buttons below to steer! Avoid other cars!</p>
+        <p id="user-id-display" class="text-xs mt-2 text-gray-500 truncate">Loading user data...</p>
+    </header>
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+
+    <!-- Game Info and Controls -->
+    <div class="bg-gray-800 p-4 mt-4 rounded-xl shadow-lg border border-gray-700">
+        <div class="flex justify-between items-center mb-4 text-white font-semibold">
+            <div class="flex flex-col items-start">
+                <span class="text-gray-400 text-sm">Distance</span>
+                <span id="score" class="text-xl text-yellow-400">0</span>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-gray-400 text-sm">High Score</span>
+                <span id="high-score" class="text-xl text-green-400">0</span>
+            </div>
+        </div>
+
+        <div id="message-box" class="text-center p-3 mb-4 rounded-lg bg-red-800 text-white font-bold hidden">
+            Game Over! Press Restart to try again.
+        </div>
+        
+        <!-- CONTROL BUTTONS -->
+        <div class="flex justify-center space-x-4 mb-4">
+            <button id="control-left" 
+                    ontouchstart="handleButtonPress('left', true)" 
+                    ontouchend="handleButtonPress('left', false)"
+                    onmousedown="handleButtonPress('left', true)" 
+                    onmouseup="handleButtonPress('left', false)"
+                    onmouseleave="handleButtonPress('left', false)"
+                    class="bg-blue-600 text-white p-3 rounded-lg text-2xl font-bold w-1/3 hover:bg-blue-700 active:bg-blue-800">
+                &leftarrow;
+            </button>
+            <button id="control-right" 
+                    ontouchstart="handleButtonPress('right', true)" 
+                    ontouchend="handleButtonPress('right', false)"
+                    onmousedown="handleButtonPress('right', true)" 
+                    onmouseup="handleButtonPress('right', false)"
+                    onmouseleave="handleButtonPress('right', false)"
+                    class="bg-blue-600 text-white p-3 rounded-lg text-2xl font-bold w-1/3 hover:bg-blue-700 active:bg-blue-800">
+                &rightarrow;
+            </button>
+        </div>
+        <!-- END CONTROL BUTTONS -->
+
+        <button id="restart-btn" onclick="startGame()" class="styled-button w-full bg-red-600 text-white py-3 rounded-lg text-lg font-bold hover:bg-red-700 transition duration-150">
+            Start Race
+        </button>
+    </div>
+</div>
+
+<!-- The Modal for Alerts/Confirmations (Replaces alert()) -->
+<div id="custom-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden flex items-center justify-center">
+    <div id="game-over-modal" class="p-8 rounded-xl shadow-3xl w-full">
+        <!-- VIDEO ELEMENT -->
+        <div class="mb-4 rounded-lg overflow-hidden border-4 border-red-700">
+            <video id="crash-video" width="100%" autoplay muted playsinline poster="https://placehold.co/400x225/4b5563/ffffff?text=Video+Placeholder">
+                <!-- !!! REPLACE THIS SOURCE URL WITH YOUR MP4 VIDEO LINK !!! -->
+                <source src="bading.mp4" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </div>
+        <!-- END NEW VIDEO ELEMENT -->
+        <h3 id="modal-title" class="text-3xl font-extrabold mb-4 text-center">Game Alert</h3>
+        <p id="modal-message" class="text-xl font-semibold mb-6 text-center">An important message.</p>
+        <button onclick="closeModal()" class="w-full bg-red-600 text-white py-3 rounded-lg text-lg font-bold hover:bg-red-700 transition styled-button">Close & Reset</button>
+    </div>
+</div>
+
+<script type="module">
+    // --- FIREBASE IMPORTS AND SETUP ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Set Firestore log level to Debug
+    setLogLevel('Debug');
+
+    // Global Variables provided by the environment
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+    let app, db, auth;
+    let userId = null;
+
+    const userIdDisplay = document.getElementById('user-id-display');
+
+    /**
+     * Initializes Firebase and handles user authentication.
+     */
+    window.addEventListener('load', async () => {
+        if (Object.keys(firebaseConfig).length > 0) {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // 1. Setup Auth State Listener
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = `User ID: ${userId}`;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                    } else {
+                        userId = null;
+                        userIdDisplay.textContent = `User ID: Not Signed In`;
+                        console.log("User signed out.");
+                    }
+                });
+
+                // 2. Initial Sign-In
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                    console.log("Signed in with custom token.");
+                } else {
+                    await signInAnonymously(auth);
+                    console.log("Signed in anonymously.");
+                }
+            } catch (error) {
+                console.error("Firebase Initialization/Auth Error:", error);
+                userIdDisplay.textContent = "Error loading Firebase.";
+            }
+        } else {
+            userIdDisplay.textContent = "Running without persistence (No Firebase Config).";
+            console.warn("Firebase config missing. Running game without score persistence.");
+        }
+        
+        // CRITICAL FIX: Always initialize game mechanics regardless of Firebase setup success
+        initGame();
+    });
+
+    // --- UTILITY FUNCTIONS (Modal) ---
+
+    const customModal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const crashVideo = document.getElementById('crash-video'); // Reference to the new video element
+
+    /**
+     * Displays a custom modal instead of alert() or confirm().
+     * @param {string} title
+     * @param {string} message
+     */
+    window.showModal = function(title, message) {
+        modalTitle.textContent = title;
+        // Correctly use innerHTML to render HTML tags in the message
+        modalMessage.innerHTML = message; 
+        customModal.classList.remove('hidden');
+        customModal.classList.add('flex');
+        
+        // Ensure Tone.js starts on user interaction
+        Tone.start();
+    }
+
+    window.closeModal = function() {
+        customModal.classList.remove('flex');
+        customModal.classList.add('hidden');
+        // Pause and reset video when modal closes
+        if (crashVideo) {
+            crashVideo.pause();
+            crashVideo.currentTime = 0;
+        }
+    }
+
+    // --- GAME LOGIC ---
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('score');
+    const highScoreDisplay = document.getElementById('high-score');
+    const messageBox = document.getElementById('message-box');
+    const restartBtn = document.getElementById('restart-btn');
+
+    let gameLoopId = null;
+    let isGameRunning = false;
+    let isCrashing = false; 
+    let keys = {};
+    let highscore = 0;
+
+    // Game entity dimensions (will be recalculated in resizeCanvas)
+    let car = {
+        x: 0, y: 0, width: 20, height: 40,
+        speedX: 0, maxSpeedX: 3, acceleration: 0.3,
+        color: 'var(--car-color)'
+    };
+
+    let track = {
+        width: 0,
+        lineHeight: 50,
+        scrollOffset: 0,
+        speed: 5,
+        score: 0
+    };
+    
+    // Obstacle variables
+    let obstacles = [];
+    let OBSTACLE_WIDTH = 0; 
+    let OBSTACLE_HEIGHT = 0; 
+    let obstacleSpawnTimer = 0;
+    const OBSTACLE_SPAWN_INTERVAL = 100; 
+    const OBSTACLE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#7c3aed'];
+
+    // --- SOUND EFFECTS SETUP (Tone.js) ---
+    
+    // 1. Crash/Explosion Sound (Noise)
+    const crashNoise = new Tone.NoiseSynth({
+        noise: { type: "white" },
+        envelope: { attack: 0.005, decay: 0.2, sustain: 0.0, release: 0.1 }
+    }).toDestination();
+    
+    // 2. Game Over Tone (Dramatic, low chord)
+    const gameOverSynth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sawtooth" },
+        envelope: { attack: 0.1, decay: 0.5, sustain: 0.1, release: 1.0 }
+    }).toDestination();
+
+    // --- END SOUND EFFECTS SETUP ---
+
+
+    /**
+     * Handles control input from buttons, touch, or simulated keys.
+     * @param {string} direction 'left' or 'right'
+     * @param {boolean} isDown true if pressed, false if released
+     */
+    window.handleButtonPress = function(direction, isDown) {
+        if (direction === 'left') {
+            keys['ArrowLeft'] = isDown;
+        } else if (direction === 'right') {
+            keys['ArrowRight'] = isDown;
+        }
+    };
+
+
+    /**
+     * Initializes game dimensions and event listeners.
+     */
+    function initGame() {
+        // Handle resizing for responsiveness
+        const resizeCanvas = () => {
+            const containerWidth = canvas.parentElement.clientWidth - 32; // Container padding
+            canvas.width = containerWidth > 400 ? 400 : containerWidth;
+            canvas.height = canvas.width * 1.25; // Maintain aspect ratio
+            
+            // Recalculate dimensions based on new size
+            car.width = canvas.width * 0.08; 
+            car.height = canvas.width * 0.12; 
+            car.x = canvas.width / 2 - car.width / 2;
+            car.y = canvas.height * 0.8;
+            
+            track.width = canvas.width * 0.6; 
+
+            OBSTACLE_WIDTH = car.width * 1.1;
+            OBSTACLE_HEIGHT = car.height;
+            
+            // Initial drawing of the car to show position before game starts
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawTrack();
+            drawCar();
+        };
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initial call
+
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+
+        // Touch input directly on the canvas (Half-screen tap controls)
+        canvas.addEventListener('touchstart', (e) => {
+            const touchX = e.touches[0].clientX;
+            const canvasRect = canvas.getBoundingClientRect();
+            const center = canvasRect.left + canvas.width / 2;
+            
+            // Use the button press handler
+            if (touchX < center) {
+                handleButtonPress('left', true);
+            } else {
+                handleButtonPress('right', true);
+            }
+            e.preventDefault(); // Prevent accidental scrolling on touch
+        }, false);
+        
+        canvas.addEventListener('touchend', (e) => {
+            // Stop input when touch ends
+            handleButtonPress('left', false);
+            handleButtonPress('right', false);
+            e.preventDefault();
+        }, false);
+
+        canvas.addEventListener('touchcancel', (e) => {
+            handleButtonPress('left', false);
+            handleButtonPress('right', false);
+            e.preventDefault();
+        }, false);
+    }
+
+    /**
+     * Resets and starts the game loop.
+     */
+    window.startGame = function() {
+        if (gameLoopId) {
+            cancelAnimationFrame(gameLoopId);
+        }
+
+        // Clear the input state on restart
+        keys = {}; 
+
+        // Reset state
+        isGameRunning = true;
+        isCrashing = false; // <-- CRITICAL: Reset this flag
+        track.score = 0;
+        track.speed = 5;
+        track.scrollOffset = 0;
+        car.x = canvas.width / 2 - car.width / 2;
+        car.speedX = 0;
+        obstacles = []; // Reset obstacles
+        obstacleSpawnTimer = 0; // Reset timer
+        
+        messageBox.classList.add('hidden');
+        restartBtn.textContent = 'Restart';
+        
+        gameLoopId = requestAnimationFrame(gameLoop);
+        
+        // Ensure Tone.js context is running after user interaction
+        Tone.start(); 
+    }
+
+    /**
+     * Handles key press events for steering.
+     */
+    function handleKeyDown(e) {
+        // Use the common handler
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            handleButtonPress(e.key === 'ArrowLeft' ? 'left' : 'right', true);
+            e.preventDefault(); // Prevent scrolling
+        }
+    }
+
+    /**
+     * Handles key release events.
+     */
+    function handleKeyUp(e) {
+        // Use the common handler
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            handleButtonPress(e.key === 'ArrowLeft' ? 'left' : 'right', false);
+        }
+    }
+
+    /**
+     * Draws the road and scrolling effect.
+     */
+    function drawTrack() {
+        const center = canvas.width / 2;
+        const halfTrack = track.width / 2;
+        
+        // 1. Draw the Road Surface (Gray)
+        ctx.fillStyle = '#4b5563'; // gray-600
+        ctx.fillRect(center - halfTrack, 0, track.width, canvas.height);
+
+        // 2. Draw Road Edges (White)
+        ctx.fillStyle = '#f3f4f6';
+        ctx.fillRect(center - halfTrack - 5, 0, 5, canvas.height); // Left boundary
+        ctx.fillRect(center + halfTrack, 0, 5, canvas.height);     // Right boundary
+
+        // 3. Draw Center Dashed Line (Scrolling effect)
+        ctx.fillStyle = '#fef3c7'; // Light yellow for visibility
+        const lineOffset = track.scrollOffset % track.lineHeight;
+
+        for (let i = 0; i < canvas.height / track.lineHeight + 1; i++) {
+            // Only draw lines within the track width
+            ctx.fillRect(center - 2, i * track.lineHeight + lineOffset, 4, track.lineHeight / 2);
+        }
+    }
+
+    /**
+     * Draws the car.
+     */
+    function drawCar(offsetX = 0, offsetY = 0) {
+        ctx.fillStyle = car.color;
+        
+        const drawX = car.x + offsetX;
+        const drawY = car.y + offsetY;
+
+        // Main body
+        ctx.fillRect(drawX, drawY, car.width, car.height);
+        
+        // Cabin/Window for detail
+        ctx.fillStyle = '#374151'; // Dark gray
+        ctx.fillRect(drawX + car.width * 0.2, drawY + car.height * 0.2, car.width * 0.6, car.height * 0.4);
+        
+        // Headlights (small white squares at the top corners)
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(drawX, drawY + car.height - 3, 3, 3);
+        ctx.fillRect(drawX + car.width - 3, drawY + car.height - 3, 3, 3);
+    }
+
+    /**
+     * Updates the car position based on input.
+     */
+    function updateCar() {
+        if (keys['ArrowLeft']) {
+            car.speedX = Math.max(-car.maxSpeedX, car.speedX - car.acceleration);
+        } else if (keys['ArrowRight']) {
+            car.speedX = Math.min(car.maxSpeedX, car.speedX + car.acceleration);
+        } else {
+            // Decelerate if no key is pressed
+            car.speedX *= 0.9;
+            if (Math.abs(car.speedX) < 0.1) car.speedX = 0;
+        }
+
+        car.x += car.speedX;
+
+        // Boundary check (Prevent car from leaving the screen entirely)
+        if (car.x < 0) car.x = 0;
+        if (car.x + car.width > canvas.width) car.x = canvas.width - car.width;
+    }
+
+    /**
+     * Creates a new obstacle (other car) at the top of the track.
+     */
+    function createObstacle() {
+        const halfTrack = track.width / 2;
+        // Calculate the actual road bounds on the canvas
+        const roadLeft = (canvas.width / 2) - halfTrack + 5; // +5 to clear the white edge
+        const roadRight = (canvas.width / 2) + halfTrack - OBSTACLE_WIDTH - 5; // -5 to clear the white edge
+
+        // Random X position within the valid road area
+        const x = roadLeft + Math.random() * (roadRight - roadLeft);
+        
+        // Random color
+        const color = OBSTACLE_COLORS[Math.floor(Math.random() * OBSTACLE_COLORS.length)];
+
+        obstacles.push({
+            x: x,
+            y: -OBSTACLE_HEIGHT, // Start just above the top
+            width: OBSTACLE_WIDTH,
+            height: OBSTACLE_HEIGHT,
+            color: color
+        });
+    }
+
+    /**
+     * Moves obstacles and handles spawning logic.
+     */
+    function updateObstacles() {
+        // Move existing obstacles down
+        for (let i = 0; i < obstacles.length; i++) {
+            obstacles[i].y += track.speed;
+        }
+
+        // Remove off-screen obstacles
+        obstacles = obstacles.filter(obs => obs.y < canvas.height);
+
+        // Handle spawning: Decrease interval as speed increases
+        obstacleSpawnTimer++;
+        // The divisor ensures interval decreases as track.speed increases
+        const spawnRate = OBSTACLE_SPAWN_INTERVAL - (track.speed * 4); 
+        
+        if (obstacleSpawnTimer >= Math.max(20, spawnRate)) { // Minimum interval of 20 frames
+            createObstacle();
+            obstacleSpawnTimer = 0;
+        }
+    }
+
+    /**
+     * Draws all active obstacles.
+     */
+    function drawObstacles() {
+        obstacles.forEach(obs => {
+            // Main body
+            ctx.fillStyle = obs.color;
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            
+            // Window for detail
+            ctx.fillStyle = '#1f2937'; 
+            ctx.fillRect(obs.x + obs.width * 0.2, obs.y + obs.height * 0.2, obs.width * 0.6, obs.height * 0.4);
+        });
+    }
+
+    /**
+     * Checks for collision between the car and the road edges.
+     * @returns {boolean} True if barrier collision occurred.
+     */
+    function checkBarrierCollision() {
+        const roadLeft = (canvas.width / 2) - (track.width / 2);
+        const roadRight = (canvas.width / 2) + (track.width / 2);
+        
+        // Collision with the road boundary
+        if (car.x < roadLeft || car.x + car.width > roadRight) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Checks for collision between the player car and any obstacle car.
+     * @returns {boolean} True if obstacle collision occurred.
+     */
+    function checkObstacleCollision() {
+        for (const obs of obstacles) {
+            if (
+                // AABB Collision Check
+                car.x < obs.x + obs.width &&
+                car.x + car.width > obs.x &&
+                car.y < obs.y + obs.height &&
+                car.y + car.height > obs.y
+            ) {
+                return true; // Collision detected!
+            }
+        }
+        return false;
+    }
+
+
+    /**
+     * The main game loop function.
+     */
+    function gameLoop() {
+        if (!isGameRunning) return;
+
+        // 1. Update Game State
+        track.scrollOffset += track.speed;
+        track.score += track.speed;
+        
+        // Gradually increase speed for difficulty
+        if (track.score % 500 === 0) {
+            track.speed = Math.min(track.speed + 0.5, 15); // Max speed cap at 15
+            console.log("Speed increased to:", track.speed);
+        }
+
+        updateCar();
+        updateObstacles();
+
+        // 2. Check for Game Over
+        if (checkBarrierCollision() || checkObstacleCollision()) {
+            // Trigger crash and game over immediately
+            handleCrashAnimation(checkBarrierCollision() ? "You crashed into the barrier!" : "You crashed into another car!");
+            return;
+        }
+
+        // 3. Drawing
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawTrack();
+        drawObstacles(); // Draw obstacles before the player car
+        drawCar();       // Draw player car last so it's always on top
+
+        // 4. Update Score Display
+        scoreDisplay.textContent = Math.floor(track.score / 10).toLocaleString();
+        if (Math.floor(track.score / 10) > highscore) {
+            highscore = Math.floor(track.score / 10);
+            highScoreDisplay.textContent = highscore.toLocaleString();
+        }
+
+        // 5. Next Frame
+        gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+    // --- CRASH SEQUENCE FUNCTIONS (Simplified for Video Integration) ---
+
+    /**
+     * Initiates the game over sequence (plays sound and triggers modal).
+     * @param {string} reason - The reason for the game over.
+     */
+    function handleCrashAnimation(reason) {
+        if (isCrashing) return;
+        
+        // Play crash sound immediately
+        crashNoise.triggerAttackRelease("4n");
+        
+        isGameRunning = false;
+        isCrashing = true;
+        
+        cancelAnimationFrame(gameLoopId);
+        
+        // Jump straight to game over state
+        gameOver(reason);
+    }
+
+    /**
+     * Stops the game and displays the game over message (final step).
+     */
+    function gameOver(reason) {
+        // NOTE: isCrashing flag must be reset in startGame(), not here
+        messageBox.classList.remove('hidden');
+        restartBtn.textContent = 'Race Again!';
+        
+        // Play game over tone
+        gameOverSynth.triggerAttackRelease(["C3", "G2", "C2"], 1.5); // A low, dramatic C minor chord
+        
+        showModal("GAME OVER", `${reason} <br><br>Distance Traveled: <b>${Math.floor(track.score / 10).toLocaleString()}</b> meters! <br>High Score: <b>${highscore.toLocaleString()}</b>`);
+
+        // Play the video when the modal is shown
+        if (crashVideo) {
+            crashVideo.currentTime = 0; // Reset video to start
+            // Use .play() with catch for reliable playback in modern browsers
+            crashVideo.play().catch(e => console.log("Video autoplay failed:", e));
+        }
+    }
+
+    // Initial setup (This section is now empty because all initialization is in the load listener)
+</script>
+<script>
+    // Configure Tailwind to use Inter font
+    if (typeof window.tailwind !== 'undefined') {
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    }
+</script>
+</body>
+</html>
