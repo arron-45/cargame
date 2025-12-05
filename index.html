@@ -169,7 +169,7 @@
         <div class="mb-4 rounded-lg overflow-hidden border-4 border-red-700">
             <video id="crash-video" width="100%" autoplay playsinline poster="https://placehold.co/400x225/4b5563/ffffff?text=Video+Placeholder">
                 <!-- !!! REPLACE THIS SOURCE URL WITH YOUR MP4 VIDEO LINK !!! -->
-                <source src="https://placehold.co/400x225/4b5563/ffffff?text=INSERT+YOUR+CRASH+VIDEO+URL+.mp4" type="video/mp4">
+                <source src="bading.mp4" type="video/mp4">
                 Your browser does not support the video tag.
             </video>
         </div>
@@ -419,7 +419,7 @@
 
         // Reset state
         isGameRunning = true;
-        isCrashing = false; // <-- CRITICAL: Reset this flag
+        isCrashing = false; 
         track.score = 0;
         track.speed = 5;
         track.scrollOffset = 0;
@@ -676,7 +676,7 @@
     function handleCrashAnimation(reason) {
         if (isCrashing) return;
         
-        // Play crash sound immediately
+        // Play crash sound immediately (separate sound for guaranteed effect)
         crashNoise.triggerAttackRelease("4n");
         
         isGameRunning = false;
@@ -702,16 +702,13 @@
 
         // Play the video when the modal is shown
         if (crashVideo) {
-            // Ensure muted is removed and play is called (it should work since Tone.js is already running)
-            crashVideo.muted = false; // Unmute the video here
+            // CRITICAL FIX: Ensure volume is explicitly 1 (unmuted) just before playing
+            crashVideo.volume = 1; 
             crashVideo.currentTime = 0; // Reset video to start
             
             // Use .play() with catch for reliable playback
             crashVideo.play().catch(e => {
-                console.error("Video playback failed, likely due to browser policy:", e);
-                // If playback fails, try muting it again and playing (as a fallback, but user wanted sound)
-                // crashVideo.muted = true;
-                // crashVideo.play(); 
+                console.error("Video playback failed (policy issue):", e);
             });
         }
     }
