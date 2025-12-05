@@ -165,11 +165,11 @@
 <!-- The Modal for Alerts/Confirmations (Replaces alert()) -->
 <div id="custom-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-50 hidden flex items-center justify-center">
     <div id="game-over-modal" class="p-8 rounded-xl shadow-3xl w-full">
-        <!-- VIDEO ELEMENT -->
+        <!-- VIDEO ELEMENT: MUTED REMOVED -->
         <div class="mb-4 rounded-lg overflow-hidden border-4 border-red-700">
-            <video id="crash-video" width="100%" autoplay muted playsinline poster="https://placehold.co/400x225/4b5563/ffffff?text=Video+Placeholder">
+            <video id="crash-video" width="100%" autoplay playsinline poster="https://placehold.co/400x225/4b5563/ffffff?text=Video+Placeholder">
                 <!-- !!! REPLACE THIS SOURCE URL WITH YOUR MP4 VIDEO LINK !!! -->
-                <source src="bading.mp4" type="video/mp4">
+                <source src="https://placehold.co/400x225/4b5563/ffffff?text=INSERT+YOUR+CRASH+VIDEO+URL+.mp4" type="video/mp4">
                 Your browser does not support the video tag.
             </video>
         </div>
@@ -692,7 +692,6 @@
      * Stops the game and displays the game over message (final step).
      */
     function gameOver(reason) {
-        // NOTE: isCrashing flag must be reset in startGame(), not here
         messageBox.classList.remove('hidden');
         restartBtn.textContent = 'Race Again!';
         
@@ -703,9 +702,17 @@
 
         // Play the video when the modal is shown
         if (crashVideo) {
+            // Ensure muted is removed and play is called (it should work since Tone.js is already running)
+            crashVideo.muted = false; // Unmute the video here
             crashVideo.currentTime = 0; // Reset video to start
-            // Use .play() with catch for reliable playback in modern browsers
-            crashVideo.play().catch(e => console.log("Video autoplay failed:", e));
+            
+            // Use .play() with catch for reliable playback
+            crashVideo.play().catch(e => {
+                console.error("Video playback failed, likely due to browser policy:", e);
+                // If playback fails, try muting it again and playing (as a fallback, but user wanted sound)
+                // crashVideo.muted = true;
+                // crashVideo.play(); 
+            });
         }
     }
 
